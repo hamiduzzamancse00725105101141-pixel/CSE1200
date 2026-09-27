@@ -1,0 +1,2386 @@
+﻿#include <cstdio>
+#include<cstdlib>
+#include<ctime>
+#include "iGraphics.h"
+#include<cmath>
+#include<fstream>
+#include<vector>
+#include<algorithm>
+using namespace std;
+
+
+
+// CONSTANTS 
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 400
+#define MAX_ENEMY 1
+#define MAX_BULLET 20
+#define MAX_COIN 20
+#define MAX_PLAYER_BULLET 30
+#define RUN_FRAMES 5
+#define HIT_FRAMES 3
+#define DIE_FRAMES 2
+#define INTRO_FRAMES 30
+int introImg[INTRO_FRAMES];
+// GLOBAL VARIABLES 
+
+int introFrame = 0;
+bool introFinished = false;
+int bg1, bg2;
+int mediumBg1, mediumBg2;
+int bgX = 0;
+int startImg;
+int levelSelectImg;
+int pauseExitImg;   // small image button used to return to Main Menu
+bool levelSelect = false;
+bool highScorePage = false;
+int highScorePageNumber = 0;
+const int SCORES_PER_PAGE = 10;
+
+// Main menu extra pages
+bool settingsPage = false;
+bool creditsPage = false;
+
+// Global game sound control
+bool soundEnabled = true;
+bool gameComplete = false;
+bool scoreSaved = false;
+bool bossDefeated = false;
+int enemyImg[4];
+int enemyFrame = 0;
+int bulletImg;
+int lifeImg;
+int coinImg;
+int playerBulletImg;
+int mouseX = 400;
+int mouseY = 200;
+bool gameOver = false;
+bool gameStarted = false;
+bool mediumLevel = false;
+bool paused = false;
+int coinCount = 0;
+int playerLife = 5;   // Player starts with 5 lives
+
+int charImg[RUN_FRAMES];
+void playerTakeHit();
+int jumpImg;
+int hitImg[HIT_FRAMES];
+int dieImg[DIE_FRAMES];
+int charX = 10;
+int charY = 50;
+
+int playerW = 60;
+int playerH = 80;
+
+// Run animation
+int idx = 0;
+
+// Animation states
+bool playerJump = false;
+bool playerHit = false;
+bool playerDead = false;
+
+// Animation frame
+int hitFrame = 0;
+int dieFrame = 0;
+
+// Animation timers
+int hitAnimTimer = 0;
+int dieAnimTimer = 0;
+
+
+// Normal speed
+int bgSpeed = 5;     // Speed while pressing D
+
+// DRAW 
+
+
+
+
+int score = 0;
+// BOSS 
+int bossImg;
+int bossX = 600;
+int bossY = 10;
+int bossW = 100;
+int bossH = 120;
+
+int bossHP = 3;
+bool bossActive = false;
+int bossFireTimer = 0;
+// AMMO 
+int ammo = 30;
+int maxAmmo = 50;
+
+int ammoX = 1200;
+int ammoY = 80;
+bool ammoActive = false;
+
+
+
+
+// POWER UP 
+int powerImg;
+
+int powerX = 1200;
+int powerY = 100;
+
+bool powerActive = false;
+
+int powerType = 0;
+
+
+bool shieldActive = false;
+bool doubleBulletActive = false;
+bool speedBoostActive = false;
+
+int powerTimer = 0;
+
+
+// COMBO 
+int combo = 0;
+int comboTimer = 0;
+
+
+// MISSION 
+int missionKill = 0;
+int missionTarget = 10;
+
+
+// NIGHT 
+bool nightMode = false;
+
+struct Enemy
+{
+	int x;
+	int y;
+	int w;
+	int h;
+};
+
+Enemy enemy[3];
+
+struct Bullet
+{
+	int x;
+	int y;
+	bool active;
+};
+
+Bullet bullet[20];
+struct LifeItem
+{
+	int x;
+	int y;
+	bool active;
+};
+
+LifeItem lifeItem;
+struct Coin
+{
+	int x;
+	int y;
+	bool active;
+};
+Coin coin[MAX_COIN];
+struct PlayerBullet
+{
+	float x;
+	float y;
+	float w;
+	float h;
+
+	float dx;
+	float dy;
+
+	bool active;
+};
+
+PlayerBullet pBullet[MAX_PLAYER_BULLET];
+//  FLYING ENEMY 
+
+struct FlyingEnemy
+{
+	int x;
+	int y;
+	int w;
+	int h;
+	int speed;
+	bool active;
+};
+
+FlyingEnemy flyingEnemy;
+
+int flyingEnemyImg[2];
+int flyingEnemyFrame = 0;
+
+// FLYING ENEMY BULLET
+#define MAX_FLYING_BULLET 10
+
+struct FlyingBullet
+{
+	float x;
+	float y;
+	float dx;
+	float dy;
+	bool active;
+};
+
+FlyingBullet flyingBullet[MAX_FLYING_BULLET];
+
+
+//  SPIKE / KATA 
+
+struct Spike
+{
+	int x;
+	int y;
+	int w;
+	int h;
+	bool active;
+};
+
+#define MAX_SPIKE 5
+
+Spike spike[MAX_SPIKE];
+
+int spikeImg;
+
+
+bool collision(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2)
+{
+	if (x1 + w1 < x2) return false;
+	if (x2 + w2 < x1) return false;
+	if (y1 + h1 < y2) return false;
+	if (y2 + h2 < y1) return false;
+
+	return true;
+
+}
+bool isTooClose(int x1, int x2)
+{
+	int gap = abs(x1 - x2);
+
+	if (gap < 250)
+		return true;
+
+	return false;
+}
+// ================= SCORE FILE HANDLING =================
+const char* SCORE_FILE = "scores.txt";
+
+void saveScoreToFile()
+{
+	if (scoreSaved) return;
+	ofstream file(SCORE_FILE, ios::out | ios::app);
+	if (file.is_open())
+	{
+		file << score << "\n";
+		file.close();
+	}
+	scoreSaved = true;
+}
+
+vector<int> loadScores()
+{
+	vector<int> scores;
+	ifstream file(SCORE_FILE);
+	int value;
+	while (file >> value) scores.push_back(value);
+	file.close();
+	return scores;
+}
+
+int getHighestScore()
+{
+	vector<int> scores = loadScores();
+	if (scores.empty()) return 0;
+	return *max_element(scores.begin(), scores.end());
+}
+
+void stopAllSounds()
+{
+	mciSendString("stop introsong", NULL, 0, NULL);
+	mciSendString("stop menusong", NULL, 0, NULL);
+	mciSendString("stop easySong", NULL, 0, NULL);
+	mciSendString("stop mediumsong", NULL, 0, NULL);
+	mciSendString("stop ggsong", NULL, 0, NULL);
+}
+
+void playGameSound(const char* command)
+{
+	if (soundEnabled)
+		mciSendString(command, NULL, 0, NULL);
+}
+
+void resetGameObjects()
+{
+	gameOver = false; gameComplete = false; scoreSaved = false; bossDefeated = false; paused = false;
+	score = 0; coinCount = 0; playerLife = 5; ammo = maxAmmo;
+	bgX = 0; charX = 80; charY = 35; idx = 0; bgSpeed = 5;
+	playerJump = false; playerHit = false; playerDead = false; hitFrame = 0; dieFrame = 0;
+	bossActive = false; bossHP = 80; bossX = SCREEN_WIDTH + 300; bossY = 30; bossFireTimer = 0;
+	for (int i = 0; i < MAX_ENEMY; i++) { enemy[i].x = SCREEN_WIDTH + 200 + i * 300; enemy[i].y = 35; }
+	for (int i = 0; i < MAX_BULLET; i++) bullet[i].active = false;
+	for (int i = 0; i < MAX_PLAYER_BULLET; i++) pBullet[i].active = false;
+	for (int i = 0; i < MAX_FLYING_BULLET; i++) flyingBullet[i].active = false;
+	for (int i = 0; i < MAX_COIN; i++) { coin[i].active = true; coin[i].x = SCREEN_WIDTH + 100 + i * 180; coin[i].y = 40 + rand() % 50; }
+	flyingEnemy.active = false; flyingEnemy.x = SCREEN_WIDTH + 500; flyingEnemy.y = 200; flyingEnemyFrame = 0;
+	for (int i = 0; i < MAX_SPIKE; i++) spike[i].active = false;
+	lifeItem.x = SCREEN_WIDTH + 1500; lifeItem.y = 40 + rand() % 60; lifeItem.active = true;
+	ammoActive = false;
+}
+
+void finishGame(bool completed)
+{
+	if (gameOver) return;
+	gameComplete = completed;
+	gameOver = true;
+	saveScoreToFile();
+	mciSendString("stop mediumsong", NULL, 0, NULL);
+	mciSendString("stop easySong", NULL, 0, NULL);
+	playGameSound("play ggsong");
+}
+
+void drawAimIndicator()
+{
+	if (gameOver || paused || playerDead) return;
+	float startX = charX + playerW / 2.0f;
+	float startY = charY + playerH / 2.0f;
+	float dx = (float)mouseX - startX;
+	float dy = (float)mouseY - startY;
+	float length = sqrt(dx * dx + dy * dy);
+	if (length < 1.0f) return;
+	dx /= length; dy /= length;
+	iSetColor(180, 220, 255);
+	for (float d = 15.0f; d <= 150.0f; d += 12.0f)
+	{
+		float dotX = startX + dx * d;
+		float dotY = startY + dy * d;
+		if (dotX < 0 || dotX > SCREEN_WIDTH || dotY < 0 || dotY > SCREEN_HEIGHT) break;
+		iFilledCircle((int)dotX, (int)dotY, 2);
+	}
+	float markX = startX + dx * 32.0f;
+	float markY = startY + dy * 32.0f;
+	iFilledCircle((int)markX, (int)markY, 4);
+}
+
+void introAnimation()
+{
+	if (introFinished)
+		return;
+
+	introFrame++;
+
+	if (introFrame >= INTRO_FRAMES)
+	{
+		introFrame = INTRO_FRAMES - 1;
+		introFinished = true;
+
+		// Intro music
+		mciSendString("stop introsong", NULL, 0, NULL);
+
+		// Main menu music 
+		playGameSound("play menusong repeat");
+	}
+}
+void iDraw()
+{
+	iClear();
+	if (!introFinished)
+	{
+		iShowImage(
+			0,
+			0,
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT,
+			introImg[introFrame]
+			);
+		iSetColor(255, 255, 255);
+
+		iText(
+			300,
+			200,
+			"Shadow Sprint",
+			GLUT_BITMAP_TIMES_ROMAN_24
+			);
+
+
+		return;
+	}
+	if (!gameStarted)
+	{
+		// GAME SETTINGS PAGE
+		if (settingsPage)
+		{
+			iShowImage(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, startImg);
+
+			iSetColor(5, 20, 60);
+			iFilledRectangle(150, 55, 500, 290);
+
+			iSetColor(120, 220, 255);
+			iText(315, 305, "GAME SETTINGS", GLUT_BITMAP_TIMES_ROMAN_24);
+
+			iSetColor(255, 255, 255);
+			iText(300, 245, "GAME SOUND", GLUT_BITMAP_HELVETICA_18);
+
+			if (soundEnabled)
+			{
+				iSetColor(30, 180, 80);
+				iFilledRectangle(300, 175, 200, 50);
+				iSetColor(255, 255, 255);
+				iText(370, 193, "ON", GLUT_BITMAP_HELVETICA_18);
+			}
+			else
+			{
+				iSetColor(190, 40, 40);
+				iFilledRectangle(300, 175, 200, 50);
+				iSetColor(255, 255, 255);
+				iText(365, 193, "OFF", GLUT_BITMAP_HELVETICA_18);
+			}
+
+			iSetColor(100, 190, 255);
+			iFilledRectangle(300, 95, 200, 50);
+			iSetColor(255, 255, 255);
+			iText(365, 113, "BACK", GLUT_BITMAP_HELVETICA_18);
+
+			return;
+		}
+
+		// CREDITS PAGE
+		if (creditsPage)
+		{
+			iShowImage(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, startImg);
+
+			iSetColor(5, 20, 60);
+			iFilledRectangle(180, 55, 440, 290);
+
+			iSetColor(120, 220, 255);
+			iText(345, 305, "CREDITS", GLUT_BITMAP_TIMES_ROMAN_24);
+
+			iSetColor(255, 255, 255);
+			iText(330, 245, "MD HAMIDUZZAMAN", GLUT_BITMAP_HELVETICA_18);
+			iText(330, 200, "RAJKUMAR GOASH", GLUT_BITMAP_HELVETICA_18);
+			iText(330, 155, "NOUSIN FERDUSI DINA", GLUT_BITMAP_HELVETICA_18);
+
+			iSetColor(100, 190, 255);
+			iFilledRectangle(320, 90, 160, 45);
+			iSetColor(255, 255, 255);
+			iText(365, 106, "BACK", GLUT_BITMAP_HELVETICA_18);
+
+			return;
+		}
+
+		if (highScorePage)
+		{
+			iShowImage(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, startImg);
+			iSetColor(5, 20, 60); iFilledRectangle(120, 35, 560, 330);
+			iSetColor(120, 220, 255); iText(305, 325, "HIGH SCORES", GLUT_BITMAP_TIMES_ROMAN_24);
+			vector<int> scores = loadScores();
+			int highest = getHighestScore();
+			iSetColor(255, 220, 80);
+			char highText[80]; sprintf(highText, "HIGHEST SCORE : %d", highest);
+			iText(275, 290, highText, GLUT_BITMAP_HELVETICA_18);
+			int totalPages = scores.empty() ? 1 : ((int)scores.size() + SCORES_PER_PAGE - 1) / SCORES_PER_PAGE;
+			if (highScorePageNumber >= totalPages) highScorePageNumber = totalPages - 1;
+			int startIndex = highScorePageNumber * SCORES_PER_PAGE;
+			int endIndex = min(startIndex + SCORES_PER_PAGE, (int)scores.size());
+			iSetColor(255, 255, 255);
+			if (scores.empty()) iText(315, 220, "NO SCORES YET", GLUT_BITMAP_HELVETICA_18);
+			else
+			{
+				int row = 245;
+				for (int i = startIndex; i < endIndex; i++)
+				{
+					char line[80]; sprintf(line, "GAME %d    SCORE : %d", i + 1, scores[i]);
+					iText(285, row, line, GLUT_BITMAP_HELVETICA_12); row -= 20;
+				}
+			}
+			iSetColor(100, 190, 255);
+			iText(145, 55, "BACK", GLUT_BITMAP_HELVETICA_18);
+			iText(340, 55, "< PREV", GLUT_BITMAP_HELVETICA_12);
+			iText(510, 55, "NEXT >", GLUT_BITMAP_HELVETICA_12);
+			char pageText[50]; sprintf(pageText, "PAGE %d / %d", highScorePageNumber + 1, totalPages);
+			iSetColor(255, 255, 255); iText(350, 80, pageText, GLUT_BITMAP_HELVETICA_12);
+			return;
+		}
+		if (levelSelect) iShowImage(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelSelectImg);
+		else iShowImage(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, startImg);
+		return;
+	}
+	if (paused)
+	{
+		if (mediumLevel)
+		{
+			iShowImage(
+				bgX,
+				0,
+				SCREEN_WIDTH,
+				SCREEN_HEIGHT,
+				mediumBg1
+				);
+
+			iShowImage(
+				bgX + SCREEN_WIDTH,
+				0,
+				SCREEN_WIDTH,
+				SCREEN_HEIGHT,
+				mediumBg2
+				);
+		}
+		else
+		{
+			iShowImage(
+				bgX,
+				0,
+				SCREEN_WIDTH,
+				SCREEN_HEIGHT,
+				bg1
+				);
+
+			iShowImage(
+				bgX + SCREEN_WIDTH,
+				0,
+				SCREEN_WIDTH,
+				SCREEN_HEIGHT,
+				bg2
+				);
+		}
+
+		iSetColor(255, 255, 0);
+
+		iText(
+			350,
+			280,
+			"PAUSED",
+			GLUT_BITMAP_TIMES_ROMAN_24
+			);
+
+		// RESUME BUTTON
+		iSetColor(0, 150, 0);
+
+		iFilledRectangle(
+			300,
+			210,
+			200,
+			50
+			);
+
+		iSetColor(255, 255, 255);
+
+		iText(
+			355,
+			228,
+			"RESUME",
+			GLUT_BITMAP_HELVETICA_18
+			);
+
+		// MAIN MENU IMAGE BUTTON
+		// Put your small button image at:
+		// Images//pause_exit.png
+		//
+		// Position and size:
+		// x = 330, y = 135, width = 140, height = 45
+		iShowImage(
+			330,
+			135,
+			140,
+			45,
+			pauseExitImg
+			);
+
+		return;
+	}
+	// RESTART BUTTON
+	iSetColor(0, 150, 0);
+
+	iFilledRectangle(
+		280,
+		120,
+		240,
+		50
+		);
+
+	iSetColor(255, 255, 255);
+
+	iText(
+		335,
+		138,
+		"RESTART",
+		GLUT_BITMAP_HELVETICA_18
+		);
+
+	// BACKGROUND
+
+
+	if (mediumLevel)
+	{
+		// MEDIUM LEVEL BACKGROUND
+		iShowImage(
+			bgX,
+			0,
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT,
+			mediumBg1
+			);
+
+		iShowImage(
+			bgX + SCREEN_WIDTH,
+			0,
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT,
+			mediumBg2
+			);
+	}
+	else
+	{
+		// EASY LEVEL BACKGROUND
+		iShowImage(
+			bgX,
+			0,
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT,
+			bg1
+			);
+
+		iShowImage(
+			bgX + SCREEN_WIDTH,
+			0,
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT,
+			bg2
+			);
+	}
+
+	if (bgX <= -SCREEN_WIDTH)
+	{
+		bgX = 0;
+	}
+
+
+
+	// Coins 
+
+	for (int i = 0; i < MAX_COIN; i++)
+	{
+		if (coin[i].active)
+		{
+			iShowImage(coin[i].x,
+				coin[i].y,
+				30,
+				30,
+				coinImg);
+		}
+	}
+	// LIFE ITEM 
+
+	if (lifeItem.active)
+	{
+		iShowImage(
+			lifeItem.x,
+			lifeItem.y,
+			30,
+			30,
+			lifeImg
+			);
+	}
+	// Enemy 
+
+	for (int i = 0; i < MAX_ENEMY; i++)
+	{
+		iShowImage(enemy[i].x,
+			enemy[i].y,
+			enemy[i].w,
+			enemy[i].h,
+			enemyImg[enemyFrame]);
+	}
+
+
+	// FLYING ENEMY
+
+
+	if (mediumLevel && flyingEnemy.active)
+	{
+		iShowImage(
+			flyingEnemy.x,
+			flyingEnemy.y,
+			flyingEnemy.w,
+			flyingEnemy.h,
+			flyingEnemyImg[flyingEnemyFrame]
+			);
+	}
+
+
+
+	// SPIKES / KATA
+
+	if (mediumLevel){
+		for (int i = 0; i < MAX_SPIKE; i++)
+		{
+			if (spike[i].active)
+			{
+				iShowImage(
+					spike[i].x,
+					spike[i].y,
+					spike[i].w,
+					spike[i].h,
+					spikeImg
+					);
+			}
+		}
+	}
+	// BOSS 
+
+	if (bossActive)
+	{
+		iShowImage(
+			bossX,
+			bossY,
+			bossW,
+			bossH,
+			bossImg
+			);
+
+		// Boss HP
+		iSetColor(255, 0, 0);
+
+		iFilledRectangle(
+			bossX,
+			bossY + bossH + 5,
+			bossHP * 2,
+			10
+			);
+
+		iSetColor(255, 255, 255);
+
+		iText(
+			bossX,
+			bossY + bossH + 25,
+			"BOSS HP",
+			GLUT_BITMAP_HELVETICA_12
+			);
+	}
+
+	// Enemy Bullet 
+
+	for (int i = 0; i < MAX_BULLET; i++)
+	{
+		if (bullet[i].active)
+		{
+			iShowImage(bullet[i].x, bullet[i].y, 30, 20, bulletImg);
+		}
+	}
+	// FLYING ENEMY BULLETS
+	for (int i = 0; i < MAX_FLYING_BULLET; i++)
+	{
+		if (flyingBullet[i].active)
+		{
+			iShowImage(
+				(int)flyingBullet[i].x,
+				(int)flyingBullet[i].y,
+				24,
+				16,
+				bulletImg
+				);
+		}
+	}
+
+	//  PLAYER DRAW 
+
+	if (playerDead)
+	{
+		// Die animation
+		iShowImage(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			dieImg[dieFrame]
+			);
+	}
+	else if (playerHit)
+	{
+		// Hit animation
+		iShowImage(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			hitImg[hitFrame]
+			);
+	}
+	else if (playerJump)
+	{
+		// Jump image
+		iShowImage(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			jumpImg
+			);
+	}
+	else
+	{
+		// Normal Run animation
+		iShowImage(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			charImg[idx]
+			);
+	}
+
+	// Small dotted mouse-aim indicator
+	drawAimIndicator();
+
+	//hud
+	char ammoText[50];
+
+	sprintf(ammoText, "AMMO : %d / %d",
+		ammo, maxAmmo);
+
+	iSetColor(255, 255, 0);
+
+	iText(
+		20,
+		280,
+		ammoText,
+		GLUT_BITMAP_HELVETICA_18
+		);
+	//ammo
+	if (ammoActive)
+	{
+		iShowImage(
+			ammoX,
+			ammoY,
+			40,
+			30,
+			bulletImg
+			);
+	}
+
+
+
+
+	// PC GAME HUD 
+
+	char txt[50];
+
+	sprintf_s(txt, "SCORE : %d", score);
+
+	iSetColor(255, 255, 255);
+	iText(
+		20,
+		370,
+		txt,
+		GLUT_BITMAP_HELVETICA_18
+		);
+	// PAUSE BUTTON 
+
+	if (!gameOver)
+	{
+		iSetColor(100, 100, 100);
+
+		iFilledRectangle(
+			700,
+			340,
+			80,
+			40
+			);
+
+		iSetColor(255, 255, 255);
+
+		iText(
+			718,
+			353,
+			"PAUSE",
+			GLUT_BITMAP_HELVETICA_12
+			);
+	}
+
+
+	// LIFE 
+
+	char txt2[50];
+
+	sprintf_s(txt2, "LIFE : %d", playerLife);
+
+	iSetColor(255, 255, 255);
+	iText(
+		20,
+		340,
+		txt2,
+		GLUT_BITMAP_HELVETICA_18
+		);
+
+
+	// COIN 
+
+	char txt3[50];
+
+	sprintf_s(txt3, "COIN : %d", coinCount);
+
+	iSetColor(255, 255, 0);
+	iText(
+		20,
+		310,
+		txt3,
+		GLUT_BITMAP_HELVETICA_18
+		);
+
+
+	// HEALTH BAR 
+
+	iSetColor(255, 0, 0);
+
+	iFilledRectangle(
+		120,
+		335,
+		playerLife * 25,
+		12
+		);
+
+	iSetColor(255, 255, 255);
+
+	iText(
+		120,
+		350,
+		"HP",
+		GLUT_BITMAP_HELVETICA_12
+		);
+	// GAME OVER 
+
+	if (gameOver)
+	{
+		iSetColor(gameComplete ? 80 : 255, gameComplete ? 255 : 0, gameComplete ? 120 : 0);
+
+		iText(
+			gameComplete ? 275 : 300,
+			250,
+			gameComplete ? "GAME COMPLETE!" : "GAME OVER",
+			GLUT_BITMAP_TIMES_ROMAN_24
+			);
+
+		iSetColor(255, 255, 255);
+
+		char finalScore[50];
+
+		sprintf_s(
+			finalScore,
+			"FINAL SCORE : %d",
+			score
+			);
+
+		iText(
+			310,
+			210,
+			finalScore,
+			GLUT_BITMAP_HELVETICA_18
+			);
+
+		char finalCoin[50];
+
+		sprintf_s(
+			finalCoin,
+			"COINS : %d",
+			coinCount
+			);
+
+		iText(
+			350,
+			180,
+			finalCoin,
+			GLUT_BITMAP_HELVETICA_18
+			);
+
+		if (gameComplete)
+		{
+			iSetColor(0, 0, 0);
+			iText(280, 150, "BOSS DEFEATED - YOU WIN!", GLUT_BITMAP_HELVETICA_12);
+		}
+
+
+	}
+
+	// Player Bullet 
+
+	for (int i = 0; i < MAX_PLAYER_BULLET; i++)
+	{
+		if (pBullet[i].active)
+		{
+
+
+			iShowImage(
+				(int)pBullet[i].x,
+				(int)pBullet[i].y,
+				(int)pBullet[i].w,
+				(int)pBullet[i].h,
+				playerBulletImg);
+		}
+	}
+
+
+
+
+}
+
+// AUTO MOVE 
+void autoMove()
+{
+	if (gameOver)
+		return;
+	if (!gameStarted)
+		return;
+	if (paused)
+		return;
+	// Background 
+	bgX -= bgSpeed;
+	// AMMO SPAWN 
+
+	static int ammoSpawnTimer = 0;
+
+	ammoSpawnTimer++;
+
+	if (!ammoActive && ammoSpawnTimer >= 400)
+	{
+		ammoSpawnTimer = 0;
+
+		ammoX = SCREEN_WIDTH + 500 + rand() % 500;
+		ammoY = 50 + rand() % 100;
+
+		ammoActive = true;
+	}
+	// AMMO MOVE 
+
+	if (ammoActive)
+	{
+		ammoX -= 5;
+
+		if (collision(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			ammoX,
+			ammoY,
+			40,
+			30))
+		{
+			ammoActive = false;
+
+			ammo += 10;
+
+			if (ammo > maxAmmo)
+				ammo = maxAmmo;
+		}
+
+		if (ammoX < -40)
+			ammoActive = false;
+	}
+
+	// RANDOM LIFE ITEM SPAWN 
+
+	static int lifeTimer = 0;
+
+	lifeTimer++;
+
+	if (!lifeItem.active && lifeTimer >= 500)
+	{
+		lifeTimer = 0;
+
+		lifeItem.x = SCREEN_WIDTH + 500 + rand() % 500;
+		lifeItem.y = 40 + rand() % 70;
+
+		lifeItem.active = true;
+	}
+	//  FLYING ENEMY ANIMATION 
+
+	static int flyingAnimTimer = 0;
+
+	flyingAnimTimer++;
+
+	if (flyingAnimTimer >= 5)
+	{
+		flyingEnemyFrame++;
+
+		if (flyingEnemyFrame >= 2)
+			flyingEnemyFrame = 0;
+
+		flyingAnimTimer = 0;
+	}
+	// Player Animation 
+	static int enemyTimer = 0;
+	enemyTimer++;
+	if (enemyTimer >= 5)
+	{
+		enemyFrame++;
+		if (enemyFrame >= 3)
+			enemyFrame = 0;
+		enemyTimer = 0;
+	}
+	//  RUN ANIMATION 
+
+	if (!playerJump && !playerHit && !playerDead)
+	{
+		static int runTimer = 0;
+
+		runTimer++;
+
+		if (runTimer >= 4)
+		{
+			idx++;
+
+			if (idx >= RUN_FRAMES)
+				idx = 0;
+
+			runTimer = 0;
+		}
+	}
+
+
+
+	// COIN MOVE 
+
+	for (int i = 0; i < MAX_COIN; i++)
+	{
+		if (!coin[i].active)
+			continue;
+
+		coin[i].x -= 5;
+
+		// Coin collect
+		if (collision(
+			charX, charY,
+			playerW, playerH,
+			coin[i].x, coin[i].y,
+			30, 30))
+		{
+			score += 1;
+			coinCount++;
+			//new coin spawn
+			coin[i].x = SCREEN_WIDTH + 700 + rand() % 2000;
+			coin[i].y = 50 + rand() % 60;
+
+		}
+
+		// Coin out of screen
+		if (coin[i].x < -30)
+		{
+			coin[i].x = SCREEN_WIDTH + 1000 + rand() % 4000;
+			coin[i].y = 50 + rand() % 60;
+		}
+	}
+
+	// LIFE ITEM MOVE 
+
+	if (lifeItem.active)
+	{
+		lifeItem.x -= 5;
+
+		if (collision(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			lifeItem.x,
+			lifeItem.y,
+			30,
+			30))
+		{
+			lifeItem.active = false;
+
+			if (playerLife < 7)
+			{
+				playerLife++;
+			}
+			score += 5;
+		}
+
+		if (lifeItem.x < -30)
+		{
+			lifeItem.active = false;
+		}
+	}
+
+
+
+
+
+
+
+	// Enemy Fire 
+	static int fireTimer = 0;
+
+	fireTimer++;
+
+	if (fireTimer >= 60)
+	{
+		fireTimer = 0;
+
+		for (int i = 0; i < MAX_ENEMY; i++)
+		{
+			for (int j = 0; j < MAX_BULLET; j++)
+			{
+				if (!bullet[j].active)
+				{
+					bullet[j].active = true;
+
+					bullet[j].x = enemy[i].x;
+					bullet[j].y = enemy[i].y + enemy[i].h / 2;
+
+					break;
+				}
+			}
+		}
+	}
+
+
+	for (int i = 0; i < MAX_BULLET; i++)
+	{
+		if (!bullet[i].active)
+			continue;
+
+		bullet[i].x -= 10;
+
+		if (bullet[i].x < -30)
+		{
+			bullet[i].active = false;
+			continue;
+		}
+
+		if (collision(
+			charX,
+			charY,
+			playerW,
+			playerH,
+			bullet[i].x,
+			bullet[i].y,
+			30,
+			20))
+		{
+			bullet[i].active = false;
+
+			if (!shieldActive)
+			{
+				playerTakeHit();
+
+				if (playerLife <= 0)
+				{
+					playerLife = 0;
+
+				}
+			}
+		}
+	}
+	// ENEMY MOVE 
+
+	for (int i = 0; i < MAX_ENEMY; i++)
+	{
+		enemy[i].x -= bgSpeed;
+
+		// Enemy hit player
+		if (collision(
+			charX, charY,
+			playerW, playerH,
+			enemy[i].x, enemy[i].y,
+			enemy[i].w, enemy[i].h))
+		{
+			// Player life
+			playerTakeHit();
+
+			// Enemy repeat spawn 
+			enemy[i].x = SCREEN_WIDTH + 200 + rand() % 400;
+			enemy[i].y = 35;
+
+			// if Life 0 Game Over
+			if (playerLife <= 0)
+			{
+				playerLife = 0;
+			}
+		}
+
+		// Enemy out of  screen spawn
+		if (enemy[i].x < -enemy[i].w)
+		{
+			enemy[i].x = SCREEN_WIDTH + 200 + rand() % 400;
+			enemy[i].y = 35;
+		}
+	}
+
+	// BOSS SYSTEM - runs independently of player shooting
+	if (score >= 50 && !bossActive && !bossDefeated)
+	{
+		bossActive = true;
+		bossX = SCREEN_WIDTH + 300;
+		bossY = 30;
+		bossHP = 80;
+		bossFireTimer = 0;
+	}
+
+	if (bossActive)
+	{
+		if (bossX > 600)
+			bossX -= 3;
+
+		bossFireTimer++;
+		if (bossFireTimer >= 80)
+		{
+			bossFireTimer = 0;
+			int fired = 0;
+
+			for (int b = 0; b < MAX_BULLET; b++)
+			{
+				if (!bullet[b].active)
+				{
+					bullet[b].active = true;
+					bullet[b].x = bossX;
+					if (fired == 0)
+					{
+						bullet[b].y = bossY + 15;
+					}
+					else
+					{
+						bullet[b].y = bossY + 100;
+					}
+					fired++;
+					if (fired == 2) break;
+				}
+			}
+		}
+	}
+
+	// PLAYER BULLET SYSTEM 
+
+	for (int i = 0; i < MAX_PLAYER_BULLET; i++)
+	{
+		if (!pBullet[i].active)
+			continue;
+
+		// Bullet move according to mouse direction
+		pBullet[i].x += pBullet[i].dx * 8.0f;
+		pBullet[i].y += pBullet[i].dy * 8.0f;
+
+
+		// Bullet Outside Screen 
+
+		if (pBullet[i].x > SCREEN_WIDTH ||
+			pBullet[i].x + pBullet[i].w < 0 ||
+			pBullet[i].y > SCREEN_HEIGHT ||
+			pBullet[i].y + pBullet[i].h < 0)
+		{
+			pBullet[i].active = false;
+			continue;
+		}
+
+		// Player Bullet vs Enemy 
+
+		for (int j = 0; j < MAX_ENEMY; j++)
+		{
+			if (collision(
+				(int)pBullet[i].x,
+				(int)pBullet[i].y,
+				(int)pBullet[i].w,
+				(int)pBullet[i].h,
+
+				enemy[j].x,
+				enemy[j].y,
+				enemy[j].w,
+				enemy[j].h))
+			{
+				// Bullet disappear
+				pBullet[i].active = false;
+
+				// Enemy respawn
+				enemy[j].x = SCREEN_WIDTH + 200 + rand() % 400;
+				enemy[j].y = 35;
+
+				// Score
+				score += 5;
+
+				break;
+			}
+		}
+
+
+
+		// PLAYER BULLET HITS BOSS
+		if (bossActive && pBullet[i].active)
+		{
+			if (collision(
+				(int)pBullet[i].x,
+				(int)pBullet[i].y,
+				(int)pBullet[i].w,
+				(int)pBullet[i].h,
+				bossX,
+				bossY,
+				bossW,
+				bossH))
+			{
+				pBullet[i].active = false;
+				bossHP -= 10;
+
+				if (bossHP <= 0)
+				{
+					bossHP = 0;
+					bossActive = false;
+					bossDefeated = true;
+
+					score += 100;
+					combo += 5;
+					missionKill++;
+
+					// Boss defeat completes both Easy and Medium.
+					finishGame(true);
+				}
+			}
+		}
+
+
+		// Player Bullet vs Enemy Bullet 
+
+		if (!pBullet[i].active)
+			continue;
+
+		for (int j = 0; j < MAX_BULLET; j++)
+		{
+			if (!bullet[j].active)
+				continue;
+
+			if (collision(
+				(int)pBullet[i].x,
+				(int)pBullet[i].y,
+				(int)pBullet[i].w,
+				(int)pBullet[i].h,
+
+				bullet[j].x,
+				bullet[j].y,
+				20,
+				10))
+			{
+				// Both bullets disappear
+				pBullet[i].active = false;
+				bullet[j].active = false;
+
+				break;
+			}
+		}
+	}
+
+	// MEDIUM LEVEL
+	// FLYING ENEMY
+
+	if (mediumLevel){
+		static int flyingSpawnTimer = 0;
+
+		flyingSpawnTimer++;
+
+
+		// Flying Enemy Spawn
+
+		if (!flyingEnemy.active && flyingSpawnTimer >= 300)
+		{
+			flyingSpawnTimer = 0;
+
+			flyingEnemy.x = SCREEN_WIDTH + 300 + rand() % 500;
+
+			flyingEnemy.y = 150 + rand() % 120;
+
+			flyingEnemy.w = 70;
+			flyingEnemy.h = 70;
+
+			flyingEnemy.speed = 5;
+
+			flyingEnemy.active = true;
+		}
+
+
+		// Flying Enemy Move
+
+		if (flyingEnemy.active)
+		{
+			flyingEnemy.x -= flyingEnemy.speed;
+
+
+			// Up and Down Movement
+
+			static int flyMoveTimer = 0;
+
+			flyMoveTimer++;
+
+			if (flyMoveTimer % 20 < 10)
+			{
+				flyingEnemy.y += 2;
+			}
+			else
+			{
+				flyingEnemy.y -= 2;
+			}
+
+
+			// Flying Enemy hits Player
+
+			if (collision(
+				charX,
+				charY,
+				playerW,
+				playerH,
+
+				flyingEnemy.x,
+				flyingEnemy.y,
+				flyingEnemy.w,
+				flyingEnemy.h))
+			{
+				if (!shieldActive)
+				{
+					playerTakeHit();
+					combo = 0;
+				}
+
+				flyingEnemy.active = false;
+
+				flyingEnemy.x = SCREEN_WIDTH + 500;
+			}
+
+
+			// Flying Enemy out of screen
+
+			if (flyingEnemy.x < -flyingEnemy.w)
+			{
+				flyingEnemy.active = false;
+			}
+		}
+
+
+
+		// FLYING ENEMY FIRE - shoots toward the player's current position
+		static int flyingFireTimer = 0;
+
+		if (flyingEnemy.active)
+		{
+			flyingFireTimer++;
+
+			if (flyingFireTimer >= 70)
+			{
+				flyingFireTimer = 0;
+
+				for (int i = 0; i < MAX_FLYING_BULLET; i++)
+				{
+					if (!flyingBullet[i].active)
+					{
+						flyingBullet[i].active = true;
+						flyingBullet[i].x = flyingEnemy.x + flyingEnemy.w / 2.0f;
+						flyingBullet[i].y = flyingEnemy.y + flyingEnemy.h / 2.0f;
+
+						float targetX = charX + playerW / 2.0f;
+						float targetY = charY + playerH / 2.0f;
+						float dx = targetX - flyingBullet[i].x;
+						float dy = targetY - flyingBullet[i].y;
+						float length = sqrt(dx * dx + dy * dy);
+
+						if (length > 0.001f)
+						{
+							flyingBullet[i].dx = dx / length;
+							flyingBullet[i].dy = dy / length;
+						}
+						else
+						{
+							flyingBullet[i].dx = -1.0f;
+							flyingBullet[i].dy = 0.0f;
+						}
+
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			flyingFireTimer = 0;
+		}
+
+		// FLYING ENEMY BULLET MOVE / PLAYER COLLISION
+		for (int i = 0; i < MAX_FLYING_BULLET; i++)
+		{
+			if (!flyingBullet[i].active)
+				continue;
+
+			const float flyingBulletSpeed = 9.0f;
+			flyingBullet[i].x += flyingBullet[i].dx * flyingBulletSpeed;
+			flyingBullet[i].y += flyingBullet[i].dy * flyingBulletSpeed;
+
+			if (flyingBullet[i].x < -40 ||
+				flyingBullet[i].x > SCREEN_WIDTH + 40 ||
+				flyingBullet[i].y < -40 ||
+				flyingBullet[i].y > SCREEN_HEIGHT + 40)
+			{
+				flyingBullet[i].active = false;
+				continue;
+			}
+
+			if (collision(
+				charX, charY,
+				playerW, playerH,
+				(int)flyingBullet[i].x, (int)flyingBullet[i].y,
+				24, 16))
+			{
+				flyingBullet[i].active = false;
+
+				if (!shieldActive)
+				{
+					playerTakeHit();
+					combo = 0;
+				}
+			}
+		}
+
+		// SPIKE / KATA
+
+
+		static int spikeTimer = 0;
+
+		spikeTimer++;
+
+
+		// Spike Spawn
+
+		if (spikeTimer >= 180)
+		{
+			spikeTimer = 0;
+
+			for (int i = 0; i < MAX_SPIKE; i++)
+			{
+				if (!spike[i].active)
+				{
+					spike[i].x =
+						SCREEN_WIDTH + 300 + rand() % 500;
+
+					spike[i].y = 20;
+
+					spike[i].w = 40;
+					spike[i].h = 66;
+
+					spike[i].active = true;
+
+					break;
+				}
+			}
+		}
+
+
+		// Spike Move
+
+		for (int i = 0; i < MAX_SPIKE; i++)
+		{
+			if (!spike[i].active)
+				continue;
+
+
+			spike[i].x -= 5;
+
+
+			// Spike hits Player
+
+			if (collision(
+				charX,
+				charY,
+				playerW,
+				playerH,
+
+				spike[i].x,
+				spike[i].y,
+				spike[i].w,
+				spike[i].h))
+			{
+				if (!shieldActive)
+				{
+					playerTakeHit();
+					combo = 0;
+				}
+
+				spike[i].active = false;
+			}
+
+
+			// Spike out of screen
+
+			if (spike[i].x < -50)
+			{
+				spike[i].active = false;
+			}
+		}
+	}
+}
+// PLAYER HIT
+
+void playerTakeHit()
+{
+	if (playerDead)
+		return;
+
+	playerLife--;
+
+	// LIFE 
+	if (playerLife <= 0)
+	{
+		playerLife = 0;
+
+		playerHit = false;
+		playerJump = false;
+
+		playerDead = true;
+
+		dieFrame = 0;
+		dieAnimTimer = 0;
+
+		return;
+	}
+
+	// LIFE 
+	playerHit = true;
+	playerJump = false;
+
+	hitFrame = 0;
+	hitAnimTimer = 0;
+}
+
+
+
+
+void fixedUpdate()
+{
+	if (gameOver)
+		return;
+
+	if (!gameStarted)
+		return;
+
+	if (paused)
+		return;
+
+
+	// DEAD PLAYER
+
+	if (playerDead)
+	{
+		dieAnimTimer++;
+
+		if (dieAnimTimer >= 8)
+		{
+			dieAnimTimer = 0;
+
+			dieFrame++;
+
+			if (dieFrame >= DIE_FRAMES)
+			{
+				dieFrame = DIE_FRAMES - 1;
+
+				// Die animation finished
+				finishGame(false);
+			}
+		}
+
+		return;
+	}
+
+
+	// HIT ANIMATION
+
+	if (playerHit)
+	{
+		hitAnimTimer++;
+
+		if (hitAnimTimer >= 6)
+		{
+			hitAnimTimer = 0;
+
+			hitFrame++;
+
+			if (hitFrame >= HIT_FRAMES)
+			{
+				hitFrame = 0;
+
+				playerHit = false;
+			}
+		}
+
+		return;
+	}
+
+
+	// PLAYER LEFT / RIGHT
+
+	if (isKeyPressed('d') ||
+		isSpecialKeyPressed(GLUT_KEY_RIGHT))
+	{
+		charX += 6;
+	}
+
+	if (isKeyPressed('a') ||
+		isSpecialKeyPressed(GLUT_KEY_LEFT))
+	{
+		charX -= 6;
+	}
+
+
+	// PLAYER JUMP
+
+	if (isKeyPressed('w') ||
+		isSpecialKeyPressed(GLUT_KEY_UP))
+	{
+		playerJump = true;
+
+		charY = 120;
+	}
+	else
+	{
+		playerJump = false;
+
+		charY = 30;
+	}
+
+
+	// X LIMIT
+
+	if (charX < 0)
+		charX = 0;
+
+	if (charX > SCREEN_WIDTH - playerW)
+		charX = SCREEN_WIDTH - playerW;
+}
+void iKeyboard(unsigned char key)
+{
+	if (!gameStarted)
+	{
+		if (key == 13 && !levelSelect && !highScorePage)
+		{
+			levelSelect = true;
+			return;
+		}
+		if (key == 27) exit(0);
+		return;
+	}
+
+	if (key == 'p' || key == 'P')
+	{
+		paused = !paused;
+		return;
+	}
+
+	if (key == 'r' || key == 'R')
+	{
+		resetGameObjects();
+		gameStarted = true;
+		mciSendString("stop ggsong", NULL, 0, NULL);
+		if (mediumLevel) playGameSound("play mediumsong repeat");
+		else playGameSound("play easySong repeat");
+		return;
+	}
+}
+
+
+
+
+
+void iSpecialKeyboard(unsigned char key)
+{
+
+}
+void iMouseMove(int mx, int my)
+{
+	mouseX = mx;
+	mouseY = SCREEN_HEIGHT - my;
+}
+
+void iPassiveMouseMove(int mx, int my)
+{
+	mouseX = mx;
+	mouseY = SCREEN_HEIGHT - my;
+}
+
+void iMouse(int button, int state, int mx, int my)
+{
+	if (button != GLUT_LEFT_BUTTON || state != GLUT_DOWN)
+		return;
+
+
+	int x = mx;
+	int y = my;
+
+
+
+	// MAIN MENU / LEVEL SELECT
+
+	if (!gameStarted)
+	{
+		// SETTINGS PAGE
+		if (settingsPage)
+		{
+			// SOUND ON/OFF
+			if (x >= 300 && x <= 500 && y >= 175 && y <= 225)
+			{
+				soundEnabled = !soundEnabled;
+
+				if (!soundEnabled)
+				{
+					stopAllSounds();
+				}
+				else
+				{
+					playGameSound("play menusong repeat");
+				}
+				return;
+			}
+
+			// BACK
+			if (x >= 300 && x <= 500 && y >= 95 && y <= 145)
+			{
+				settingsPage = false;
+				return;
+			}
+
+			return;
+		}
+
+		// CREDITS PAGE
+		if (creditsPage)
+		{
+			if (x >= 320 && x <= 480 && y >= 90 && y <= 135)
+			{
+				creditsPage = false;
+				return;
+			}
+			return;
+		}
+
+		if (highScorePage)
+		{
+			vector<int> scores = loadScores();
+			int totalPages = scores.empty() ? 1 : ((int)scores.size() + SCORES_PER_PAGE - 1) / SCORES_PER_PAGE;
+
+			if (x >= 130 && x <= 230 && y >= 35 && y <= 80)
+			{
+				highScorePage = false;
+				return;
+			}
+			if (x >= 330 && x <= 430 && y >= 35 && y <= 80)
+			{
+				if (highScorePageNumber > 0) highScorePageNumber--;
+				return;
+			}
+			if (x >= 500 && x <= 600 && y >= 35 && y <= 80)
+			{
+				if (highScorePageNumber + 1 < totalPages) highScorePageNumber++;
+				return;
+			}
+			return;
+		}
+
+		if (!levelSelect)
+		{
+			// START GAME
+			// start.png -> START GAME
+			if (x >= 300 && x <= 500 &&
+				y >= 180 && y <= 220)
+			{
+				levelSelect = true;
+				return;
+			}
+
+			// HIGH SCORE
+			if (x >= 300 && x <= 500 && y >= 140 && y <= 180)
+			{
+				highScorePage = true;
+				highScorePageNumber = 0;
+				return;
+			}
+
+			// GAME SETTINGS
+			// Keep this button separate from CREDITS.
+			if (x >= 300 && x <= 500 &&
+				y >= 118 && y <= 148)
+			{
+				settingsPage = true;
+				return;
+			}
+
+			// CREDITS
+			// Separate range so a Credits click cannot open Settings.
+			if (x >= 300 && x <= 500 &&
+				y >= 92 && y <= 120)
+			{
+				creditsPage = true;
+				return;
+			}
+
+			// QUIT
+			// Separate range so a Quit click cannot open Credits.
+			if (x >= 300 && x <= 500 &&
+				y >= 66 && y <= 94)
+			{
+				exit(0);
+			}
+
+			return;
+		}
+
+		// LEVEL SELECT PAGE
+
+		// EASY
+		if (x >= 280 && x <= 520 &&
+			y >= 175 && y <= 220)
+		{
+			mediumLevel = false;
+			mciSendString("stop menusong", NULL, 0, NULL);
+			playGameSound("play easySong repeat");
+			resetGameObjects();
+			gameStarted = true;
+			levelSelect = false;
+			return;
+		}
+
+		// MEDIUM
+		if (x >= 280 && x <= 520 &&
+			y >= 125 && y <= 170)
+		{
+			mediumLevel = true;
+			mciSendString("stop menusong", NULL, 0, NULL);
+			playGameSound("play mediumsong repeat");
+			resetGameObjects();
+			gameStarted = true;
+			levelSelect = false;
+			return;
+		}
+
+		// BACK
+		if (x >= 280 && x <= 520 &&
+			y >= 70 && y <= 115)
+		{
+			levelSelect = false;
+			return;
+		}
+
+		return;
+	}
+
+
+	// PAUSE SCREEN
+
+
+	if (paused)
+	{
+		// RESUME BUTTON
+		if (x >= 295 && x <= 505 &&
+			y >= 205 && y <= 265)
+		{
+			paused = false;
+
+			return;
+		}
+
+		// MAIN MENU IMAGE BUTTON
+		// Must match the exact position of the image drawn above.
+		if (x >= 325 && x <= 475 &&
+			y >= 125 && y <= 185)
+		{
+			// Stop the current level music.
+			mciSendString("stop easySong", NULL, 0, NULL);
+			mciSendString("stop mediumsong", NULL, 0, NULL);
+			mciSendString("stop ggsong", NULL, 0, NULL);
+
+			// Return to the main menu instead of closing the game.
+			gameStarted = false;
+			paused = false;
+			gameOver = false;
+			gameComplete = false;
+			levelSelect = false;
+			settingsPage = false;
+			creditsPage = false;
+			highScorePage = false;
+			highScorePageNumber = 0;
+
+			// Start menu music again if sound is ON.
+			playGameSound("play menusong repeat");
+			return;
+		}
+
+		return;
+	}
+
+
+
+	// GAME OVER / GAME COMPLETE
+	if (gameOver)
+	{
+		if (x >= 270 && x <= 530 && y >= 115 && y <= 175)
+		{
+			resetGameObjects();
+			gameStarted = true;
+			mciSendString("stop ggsong", NULL, 0, NULL);
+			if (mediumLevel)
+				playGameSound("play mediumsong repeat");
+			else
+				playGameSound("play easySong repeat");
+			return;
+		}
+		return;
+	}
+
+	//  PAUSE button top on screen
+
+	if (x >= 700 && x <= 780 &&
+		y >= 340 && y <= 380)
+	{
+		paused = true;
+
+		return;
+	}
+
+
+
+
+
+
+	// click  korle bullet fire
+
+	float targetX = (float)mx;
+	float targetY = (float)(SCREEN_HEIGHT - my);
+
+	for (int i = 0; i < MAX_PLAYER_BULLET; i++)
+	{
+		if (ammo <= 0){
+			return;
+		}
+		int shots = 1;
+
+		if (doubleBulletActive)
+			shots = 2;
+		if (!pBullet[i].active)
+		{
+			pBullet[i].active = true;
+
+			pBullet[i].x = charX + playerW;
+			pBullet[i].y = charY + playerH / 2.0f;
+
+			pBullet[i].w = 45;
+			pBullet[i].h = 10;
+
+			if (targetY < pBullet[i].y)
+				targetY = pBullet[i].y;
+
+			float dx = targetX - pBullet[i].x;
+			float dy = targetY - pBullet[i].y;
+
+			float length = sqrt(dx * dx + dy * dy);
+
+			if (length > 0.001f)
+			{
+				pBullet[i].dx = dx / length;
+				pBullet[i].dy = dy / length;
+			}
+			else
+			{
+				pBullet[i].dx = 1.0f;
+				pBullet[i].dy = 0.0f;
+			}
+			ammo--;
+			break;
+		}
+	}
+}
+// LOAD IMAGES 
+void initGame()
+{
+	srand((unsigned)time(0));
+	settingsPage = false;
+	creditsPage = false;
+	soundEnabled = true;
+	// MAIN MENU MUSIC
+	mciSendString("open \"Audios//intro.mp3\" alias introsong", NULL, 0, NULL);
+	mciSendString("open \"Audios//medium.mp3\" alias mediumsong", NULL, 0, NULL);
+	mciSendString("open \"Audios//easy.mp3\" alias easySong", NULL, 0, NULL);
+	mciSendString("open \"Audios//menu.mp3\" alias menusong", NULL, 0, NULL);
+	mciSendString("open \"Audios//gg.mp3\" alias ggsong", NULL, 0, NULL);
+	playGameSound("play introsong");
+
+	bg1 = iLoadImage("Images//bg1.png");
+	bg2 = iLoadImage("Images//bg1.png");
+	startImg = iLoadImage("Images//start.png");
+	levelSelectImg = iLoadImage("Images//levelselect.png");
+
+	// Small image button shown under RESUME on the pause screen.
+	// Add your own image with this exact filename:
+	// Images//pause_exit.png
+	pauseExitImg = iLoadImage("Images//pause_exit.png");
+	powerImg = iLoadImage("Images//power.png");
+	bossImg = iLoadImage("Images//boss.png");
+	spikeImg = iLoadImage("Images//spike.png");
+	mediumBg1 = iLoadImage("Images//mediumBg1.png");
+	mediumBg2 = iLoadImage("Images//mediumBg2.png");
+	bulletImg = iLoadImage("Images//bullet.png");
+	coinImg = iLoadImage("Images//coin.png");
+	lifeImg = iLoadImage("Images//life.png");
+	playerBulletImg = iLoadImage("Images//playerBullet.png");
+
+	// INTRO ANIMATION
+	for (int i = 0; i < INTRO_FRAMES; i++)
+	{
+		char file[100];
+		sprintf(file, "Images//intro_%02d.png", i + 1);
+
+		introImg[i] = iLoadImage(file);
+	}
+	//  LOAD PLAYER RUN IMAGES 
+
+	for (int i = 0; i < 5; i++)
+	{
+		char file[100];
+
+		sprintf(file, "Images//c%d.png", i + 1);
+
+		charImg[i] = iLoadImage(file);
+	}
+
+
+	//  LOAD JUMP IMAGE 
+
+	jumpImg = iLoadImage("Images//jump.png");
+
+
+	//  LOAD HIT IMAGES 
+
+	for (int i = 0; i < 3; i++)
+	{
+		char file[100];
+
+		sprintf(file, "Images//hit%d.png", i + 1);
+
+		hitImg[i] = iLoadImage(file);
+	}
+
+
+	//  LOAD DIE IMAGES 
+
+	for (int i = 0; i < 2; i++)
+	{
+		char file[100];
+
+		sprintf(file, "Images//die%d.png", i + 1);
+
+		dieImg[i] = iLoadImage(file);
+	}
+	for (int i = 0; i < 4; i++)
+	{
+		char file[100];
+		sprintf(file, "Images//enemy%d.png", i + 1);
+		enemyImg[i] = iLoadImage(file);
+	}
+	// FLYING ENEMY
+	for (int i = 0; i < 2; i++)
+	{
+		char file[100];
+		sprintf(file, "Images//fly%d.png", i + 1);
+		flyingEnemyImg[i] = iLoadImage(file);
+	}
+
+
+	// Enemy
+	for (int i = 0; i<MAX_ENEMY; i++)
+	{
+		enemy[i].x = 900 + i * 250;
+		enemy[i].y = 35;
+		enemy[i].w = 60;
+		enemy[i].h = 100;
+	}
+
+	// Bullet
+	for (int i = 0; i<MAX_BULLET; i++)
+	{
+		bullet[i].active = false;
+	}
+
+	// Coin
+
+
+	for (int i = 0; i < MAX_COIN; i++)
+	{
+		coin[i].x = SCREEN_WIDTH + 100 + i * 180;
+		coin[i].y = 40 + rand() % 50;
+		coin[i].active = true;
+	}
+	// LIFE ITEM 
+
+	lifeItem.x = SCREEN_WIDTH + 1500;
+	lifeItem.y = 40 + rand() % 60;
+	lifeItem.active = true;
+	// Player Bullet
+	for (int i = 0; i < MAX_PLAYER_BULLET; i++)
+	{
+		pBullet[i].active = false;
+
+		pBullet[i].x = 0;
+		pBullet[i].y = 0;
+
+		pBullet[i].w = 45;
+		pBullet[i].h = 10;
+
+		pBullet[i].dx = 0;
+		pBullet[i].dy = 0;
+	}
+	//  FLYING ENEMY INITIALIZE 
+
+	for (int i = 0; i < MAX_FLYING_BULLET; i++)
+	{
+		flyingBullet[i].x = 0;
+		flyingBullet[i].y = 0;
+		flyingBullet[i].dx = 0;
+		flyingBullet[i].dy = 0;
+		flyingBullet[i].active = false;
+	}
+
+	flyingEnemy.x = SCREEN_WIDTH + 500;
+	flyingEnemy.y = 200;
+
+	flyingEnemy.w = 70;
+	flyingEnemy.h = 70;
+
+	flyingEnemy.speed = 5;
+
+	flyingEnemy.active = false;
+
+	flyingEnemyFrame = 0;
+
+
+	//  SPIKE INITIALIZE 
+
+	for (int i = 0; i < MAX_SPIKE; i++)
+	{
+		spike[i].x = SCREEN_WIDTH + 300 + i * 500;
+
+		spike[i].y = 20;
+
+		spike[i].w = 40;
+		spike[i].h = 40;
+
+		spike[i].active = false;
+	}
+}
+
+// MAIN 
+int main()
+{
+	iInitialize(
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT,
+		"Shadow Sprint");
+
+	initGame();
+	iSetTimer(200, introAnimation);
+	iSetTimer(20, autoMove);
+	iSetTimer(20, fixedUpdate);
+
+	iStart();
+
+	return 0;
+}
