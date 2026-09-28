@@ -50,12 +50,11 @@ Open the project in Visual Studio 2013
 
 ### **Game Rules**
 
-- Each player starts with 100 health points.
+- Each player starts with 5 health points.
 - Attacks reduce the opponent’s health based on the attack type:
-- Punch: -10 HP
-- Kick: -15 HP
-- Blocking can reduce damage by 50%.
-- The first player to reduce the opponent’s health to 0 wins the round.
+- Hit Bullet: -1 HP
+- Hit obstacle: -1 HP
+- The player to reduce the opponent’s  boss enemy health to 0 wins the round.
 
 
 ## Project Contributors
